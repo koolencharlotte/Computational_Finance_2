@@ -126,9 +126,9 @@ def heston_sensitivity(M, S0, V0, K, T, dt, r, rho, kappa, theta, xi, sigma, c, 
 
 # --- Main analysis script ---
 if __name__ == "__main__":
-    S0, V0, K, T = 100.0, 0.04, 105.0, 1.0
-    r, rho, kappa, theta, xi = 0.05, -0.7, 2.0, 0.04, 0.25
-    sigma = np.sqrt(theta); c = 1.0; seed = 69; dt = 1e-4
+    S0, V0, K, T = 100.0, 0.04, 100.0, 1.0
+    r, rho, kappa, theta, xi = 0.05, -0.7, 2.0, 0.04, 0.3
+    sigma = np.sqrt(theta); c = 1.0; seed = 42; dt = 1e-4
 
     # 1) Euler vs Milstein
     dts = np.logspace(-5, -1, 10)
@@ -204,21 +204,45 @@ if __name__ == "__main__":
     # 5) Variance Reduction Efficacy
     Ms = [5000, 10000, 50000, 100000]
     efficacy = {'M': [], 'plain': [], 'std_plain': [], 'cv': [], 'std_cv': []}
+
     for i, M_paths in enumerate(Ms):
-        out = control_variate_MC(M_paths, S0, V0, K, T, dt, r, rho, kappa, theta, xi, sigma, c, seed+i)
+        out = control_variate_MC(
+            M_paths, S0, V0, K, T, dt,
+            r, rho, kappa, theta, xi, sigma, c,
+            seed + i
+        )
+        print(f"M = {M_paths}: Plain = {out['plain'][0]:.4f} ± {out['plain'][1]:.4f}, "
+              f"CV = {out['control_var'][0]:.4f} ± {out['control_var'][1]:.4f}")
+    
         efficacy['M'].append(M_paths)
-        efficacy['plain'].append(out['plain'][0]); efficacy['std_plain'].append(out['plain'][1])
-        efficacy['cv'].append(out['control_var'][0]); efficacy['std_cv'].append(out['control_var'][1])
-    # Plot efficacy
+        efficacy['plain'].append(out['plain'][0])
+        efficacy['std_plain'].append(out['plain'][1])
+        efficacy['cv'].append(out['control_var'][0])
+        efficacy['std_cv'].append(out['control_var'][1])
+
     plt.figure(figsize=(6,6))
-    plt.errorbar(efficacy['M'], efficacy['plain'], yerr=efficacy['std_plain'], fmt='o-', label='Plain MC', capsize=5)
-    plt.errorbar(efficacy['M'], efficacy['cv'],    yerr=efficacy['std_cv'],    fmt='s--', label='Control Variate MC', capsize=5)
-    plt.xlabel('Number of Paths M'); plt.ylabel('Option Price'); plt.title('Variance Reduction Efficacy'); plt.legend(); plt.grid(); plt.tight_layout()
+    plt.errorbar(
+        efficacy['M'], efficacy['plain'],
+        yerr=efficacy['std_plain'],
+        fmt='o-', label='Plain MC', capsize=5
+    )
+    plt.errorbar(
+    efficacy['M'], efficacy['cv'],
+    yerr=efficacy['std_cv'],
+    fmt='s--', label='Control Variate MC', capsize=5
+)
+    plt.xlabel('Number of Paths M')
+    plt.ylabel('Option Price')
+    plt.title('Variance Reduction Efficacy')
+    plt.legend()
+    plt.grid()
+    plt.tight_layout()
     plt.savefig(os.path.join(FIG_DIR, "2.4(a).png"))
     plt.show()
 
+
     # 6) Sensitivity analysis with errorbars
-    def plot_sensitivity(param, title, xlabel):
+    def plot_single_sensitivity(param, title, xlabel, filename):
         grid, res = heston_sensitivity(10000, S0, V0, K, T, dt, r, rho, kappa, theta, xi, sigma, c, seed, param)
         print(f"--- Sensitivity: {title} ---")
         print(f"{xlabel} grid: {grid}")
@@ -226,19 +250,39 @@ if __name__ == "__main__":
         print(f"Plain MC SE    : {res['std_plain']}")
         print(f"CV    prices   : {res['cv']}")
         print(f"CV    SE       : {res['std_cv']}\n")
-        plt.errorbar(grid - 0.02*grid, res['plain'], yerr=res['std_plain'], fmt='o', label='Plain MC', capsize=4)
-        plt.errorbar(grid + 0.02*grid, res['cv'],    yerr=res['std_cv'],    fmt='x', label='CV MC',    capsize=4)
-        plt.title(title); plt.xlabel(xlabel); plt.ylabel('Option Price'); plt.legend(); plt.grid()
-        
-    plt.figure(figsize=(10,6))
-    plt.subplot(1,3,1)
-    plot_sensitivity({'name':'xi','range':(0.1,1.0),'points':5}, 'Price vs xi', 'xi')
-    plt.subplot(1,3,2)
-    plot_sensitivity({'name':'rho','range':(-0.9,0.5),'points':5}, 'Price vs rho', 'rho')
-    plt.subplot(1,3,3)
-    plot_sensitivity({'name':'K','range':(80,120),'points':5}, 'Price vs K', 'K')
-    plt.tight_layout(); plt.savefig(os.path.join(FIG_DIR, "2.4(b).png"))
-    plt.show()
+        plt.figure(figsize=(5, 4))
+        plt.errorbar(
+            grid - 0.02 * np.array(grid), res['plain'], yerr=res['std_plain'],
+            fmt='o', label='Plain MC', capsize=4
+        )
+        plt.errorbar(
+            grid + 0.02 * np.array(grid), res['cv'], yerr=res['std_cv'],
+            fmt='x', label='CV MC', capsize=4
+        )
+        plt.title(title)
+        plt.xlabel(xlabel)
+        plt.ylabel('Option Price')
+        plt.legend()
+        plt.grid(True)
+        plt.tight_layout()
+        plt.savefig(os.path.join(FIG_DIR, filename))
+        plt.close()
+
+
+    
+    plot_single_sensitivity(
+        {'name': 'xi', 'range': (0.1, 1.0), 'points': 5},
+        'Price vs xi', 'xi', '2.4b_xi.png'
+    )
+    plot_single_sensitivity(
+        {'name': 'rho', 'range': (-0.9, 0.5), 'points': 5},
+        'Price vs rho', 'rho', '2.4b_rho.png'
+    )
+    plot_single_sensitivity(
+        {'name': 'K', 'range': (95, 105), 'points': 5},
+        'Price vs K', 'K', '2.4b_K.png'
+    )
+
 
     # 7) Optimal c and plain comparison
     X, Y = res['payoffs']
